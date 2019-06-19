@@ -1,18 +1,102 @@
-Linux kernel
-============
+Linux 5.0 for Kdump+crash lab for ARM64
+=============================================
 
-There are several guides for kernel developers and users. These guides can
-be rendered in a number of formats, like HTML and PDF. Please read
-Documentation/admin-guide/README.rst first.
+本实验代码不支持“O0”编译，若需要“O0”编译的Linux 5.0内核源代码和实验环境，请联系笨叔叔，微信：runninglinuxkernel
 
-In order to build the documentation, use ``make htmldocs`` or
-``make pdfdocs``.  The formatted documentation can also be read online at:
+本实验建立在了安装Ubuntu 18.04.2版本的x86_64台式机或者PC机上。若使用其他版本的ubuntu或者发行版，遇到问题请自行解决。特别需要注意qemu的版本不能太老。
 
-    https://www.kernel.org/doc/html/latest/
+1. 首先在Ubuntu Linux 18.04中安装如下工具。
+$ sudo apt-get install qemu libncurses5-dev gcc-aarch64-linux-gnu build- essential git bison flex libssl-dev
 
-There are various text files in the Documentation/ subdirectory,
-several of them using the Restructured Text markup notation.
+2. 在runninglinuxkernel目录下面有一个rootfs_debian.tar.xz文件，这个是基于ARM64版本的Debian系统的根文件系统。但是这个根文件系统还只是一个半成品，我们还需要根据编译好的内核来安装内核镜像和内核模块。整个过程比较复杂：
+	编译内核
+	编译内核模块
+	安装内核模块
+	安装内核头文件
+	安装编译内核模块必须依赖文件
+	制作ext4根文件系统
+这个过程比较繁琐，作者制作了一个脚本来简化上述过程。
+注意，该脚本会使用dd命令来生成一个8GB大小的镜像文件，因此主机系统需要保证至少需要10个GB的空余磁盘空间。若读者需要生成一个更大的根文件系统镜像，可以修该run_debian_arm64.sh这个脚本文件。
+$ cd runninglinuxkernel-5.0
+$ ./run_debian_arm64.sh build_kernel
+执行上述脚本需要几十分钟，依赖于主机的计算能力。
 
-Please read the Documentation/process/changes.rst file, as it contains the
-requirements for building and running the kernel, and information about
-the problems which may result by upgrading your kernel.
+3. 编译rootfs文件系统
+$ sudo ./run_debian_arm64.sh build_rootfs
+
+4. 运行.
+$ ./run_debian_arm64.sh run
+
+登录Debian系统：
+	用户名：root 或者 benshushu
+	密码：123
+
+5. 在线安装软件包
+QEMU虚拟机可以通过VirtIO-NET技术来生成一个虚拟的网卡，并且通过NAT网络桥接技术和主机进行网络共享。首先使用ifconfig命令来检查网络配置。
+root@benshushu:~# ifconfig
+可以看到生成了一个名为enp0s1的网卡设备，分配的IP地址为：10.0.2.15。
+通过apt update命令来更新Debian系统的软件仓库。
+
+$ apt update
+
+如果更新失败，有可能是系统时间比较旧了，可以使用date命令来设置日期。
+root@benshushu:~# date -s 2019-04-25 #假设最新日期是2019年4月25日
+Thu Apr 25 00:00:00 UTC 2019
+使用apt install命令来安装软件包。比如，可以在线安装gcc。
+root@benshushu:~# apt install gcc
+
+6. 主机和QEMU虚拟机之间共享文件。
+主机和QEMU虚拟机可以通过NET_9P技术进行文件共享，这个需要QEMU虚拟机的Linux内核使能NET_9P的内核模块。本实验平台已经支持主机和QEMU虚拟机的共享文件，可以通过如下简单方法来测试。
+复制一个文件到runninglinuxkernel-5.0/kmodules目录下面。
+
+$cp test.c  runninglinuxkernel-5.0/kmodules
+
+启动QEMU虚拟机之后，首先检查一下/mnt目录是否有test.c文件。
+
+/ # cd /mnt/
+/mnt # ls
+README     test.c
+/mnt #
+
+我们在后续的实验中会经常利用这个特性，比如把编译好的内核模块或者内核模块源代码放入QEMU虚拟机。
+
+7. 在QEMU虚拟机上本地编译内核模块。
+在QEMU虚拟机中安装必要的软件包。
+root@benshushu: # apt install build-essential
+
+编译内核模块。
+root@benshushu:/mnt/hello_world# make
+
+8. 使用systemctl status kdump-tools命令来查看kdump服务是否正常工作。
+编译一个简单的死机例子。加载模块的时候会触发重启，进入捕获内核，打印一句“Starting Crashdump kernel…”，或者输入”echo c > /proc/sysrq-trigger”来触发一个内核异常。
+
+5.	在QEMU虚拟机中，启动crash工具进行分析。
+进入/var/crash/目录。转存的目录是以日期来命名，这一点和Centos系统略有不同。使用crash命令来加载内核转存文件。
+
+root@benshushu:/var/crash# ls
+201904221429  kexec_cmd
+root@benshushu:/var/crash#
+
+root@benshushu:/var/crash/201904221429# crash dump.201904221429 /mnt/vmlinux
+
+      KERNEL: /mnt/vmlinux
+    DUMPFILE: dump.201904221429  [PARTIAL DUMP]
+        CPUS: 4
+        DATE: Mon Apr 22 14:28:49 2019
+      UPTIME: 00:00:13
+LOAD AVERAGE: 0.47, 0.31, 0.13
+       TASKS: 87
+    NODENAME: benshushu
+     RELEASE: 5.0.0+
+     VERSION: #1 SMP Mon Apr 22 05:40:30 CST 2019
+     MACHINE: aarch64  (unknown Mhz)
+      MEMORY: 2 GB
+       PANIC: "Unable to handle kernel NULL pointer dereference at virtual address 0000000000000050"
+         PID: 1243
+     COMMAND: "insmod"
+        TASK: ffff800052d0c600  [THREAD_INFO: ffff800052d0c600]
+         CPU: 0
+       STATE: TASK_RUNNING (PANIC)
+
+crash>
+
