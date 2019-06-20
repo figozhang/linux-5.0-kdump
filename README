@@ -1,6 +1,24 @@
-Linux 5.0 for Kdump+crash lab for ARM64
+Linux 5.0 for Kdump+crash lab On ARM64
 =============================================
+笨叔已经录制好<死机黑屏专题>视频课程节目，全球唯一一个介绍如何解决产品开发以及服务器宕机的视频课程。
+视频课程全程 5 小时高清，140多页ppt，8大实验，基于x86_64的Centos 7.6和arm64，提供全套实验素材和环境。
+全面介绍kdump+crash在死机黑屏方面的实战应用，全部案例源自线上云服务器和嵌入式产品开发实际案例！
 
+挑战死机的专题视频中8个死机案例：
+lab1：简单的空指针引发的panic
+lab2：访问已经被删除的list head链表
+lab3：复杂一点的空指针引发的panic
+lab4：一个真实的驱动引发的死机
+lab5：一个真实的驱动引发的死锁，导致系统死机
+lab6：如何找到函数调用参数的在栈中地址然后获取具体的值
+lab7：分析一个复杂的线上死锁导致的死机黑屏例子
+lab8:  手工恢复函数调用栈backtrack （arm64）
+
+购买死机黑屏专题课程：https://shop115683645.taobao.com/
+
+
+安装方法：
+=================================================
 本实验代码不支持“O0”编译，若需要“O0”编译的Linux 5.0内核源代码和实验环境，请联系笨叔叔，微信：runninglinuxkernel
 
 本实验建立在了安装Ubuntu 18.04.2版本的x86_64台式机或者PC机上。若使用其他版本的ubuntu或者发行版，遇到问题请自行解决。特别需要注意qemu的版本不能太老。
@@ -9,12 +27,12 @@ Linux 5.0 for Kdump+crash lab for ARM64
 $ sudo apt-get install qemu libncurses5-dev gcc-aarch64-linux-gnu build- essential git bison flex libssl-dev
 
 2. 在runninglinuxkernel目录下面有一个rootfs_debian.tar.xz文件，这个是基于ARM64版本的Debian系统的根文件系统。但是这个根文件系统还只是一个半成品，我们还需要根据编译好的内核来安装内核镜像和内核模块。整个过程比较复杂：
-	编译内核
-	编译内核模块
-	安装内核模块
-	安装内核头文件
-	安装编译内核模块必须依赖文件
-	制作ext4根文件系统
+*编译内核
+*编译内核模块
+*安装内核模块
+*安装内核头文件
+*安装编译内核模块必须依赖文件
+*制作ext4根文件系统
 这个过程比较繁琐，作者制作了一个脚本来简化上述过程。
 注意，该脚本会使用dd命令来生成一个8GB大小的镜像文件，因此主机系统需要保证至少需要10个GB的空余磁盘空间。若读者需要生成一个更大的根文件系统镜像，可以修该run_debian_arm64.sh这个脚本文件。
 $ cd runninglinuxkernel-5.0
@@ -28,8 +46,8 @@ $ sudo ./run_debian_arm64.sh build_rootfs
 $ ./run_debian_arm64.sh run
 
 登录Debian系统：
-	用户名：root 或者 benshushu
-	密码：123
+*用户名：root 或者 benshushu
+*密码：123
 
 5. 在线安装软件包
 QEMU虚拟机可以通过VirtIO-NET技术来生成一个虚拟的网卡，并且通过NAT网络桥接技术和主机进行网络共享。首先使用ifconfig命令来检查网络配置。
@@ -46,16 +64,17 @@ Thu Apr 25 00:00:00 UTC 2019
 root@benshushu:~# apt install gcc
 
 6. 主机和QEMU虚拟机之间共享文件。
-主机和QEMU虚拟机可以通过NET_9P技术进行文件共享，这个需要QEMU虚拟机的Linux内核使能NET_9P的内核模块。本实验平台已经支持主机和QEMU虚拟机的共享文件，可以通过如下简单方法来测试。
-复制一个文件到runninglinuxkernel-5.0/kmodules目录下面。
+主机和QEMU虚拟机可以通过NET_9P技术进行文件共享，这个需要QEMU虚拟机的Linux内核使能NET_9P的内核模块。
+本实验平台已经支持主机和QEMU虚拟机的共享文件，可以通过如下简单方法来测试。
+复制一个文件到runninglinuxkernel-5.0/kmodules目录下面。比如拷贝vmlinux。
 
-$cp test.c  runninglinuxkernel-5.0/kmodules
+$cp vmlinux  runninglinuxkernel-5.0/kmodules
 
-启动QEMU虚拟机之后，首先检查一下/mnt目录是否有test.c文件。
+启动QEMU虚拟机之后，首先检查一下/mnt目录是否有vmlinux文件。
 
 / # cd /mnt/
 /mnt # ls
-README     test.c
+01_oops     vmlinux
 /mnt #
 
 我们在后续的实验中会经常利用这个特性，比如把编译好的内核模块或者内核模块源代码放入QEMU虚拟机。
@@ -65,18 +84,77 @@ README     test.c
 root@benshushu: # apt install build-essential
 
 编译内核模块。
-root@benshushu:/mnt/hello_world# make
+root@benshushu:/mnt/01_oops# make
 
 8. 使用systemctl status kdump-tools命令来查看kdump服务是否正常工作。
-编译一个简单的死机例子。加载模块的时候会触发重启，进入捕获内核，打印一句“Starting Crashdump kernel…”，或者输入”echo c > /proc/sysrq-trigger”来触发一个内核异常。
+编译一个简单的死机例子。加载模块的时候会触发重启，进入捕获内核，比如加载刚才编译的模块：
+root@benshushu:/mnt/01_oops# insmod oops.ko
+[ 1016.544189] oops: loading out-of-tree module taints kernel.
+[ 1016.562363] Unable to handle kernel NULL pointer dereference at virtual address 0000000000000050
+[ 1016.562821] Mem abort info:
+[ 1016.562993]   ESR = 0x96000004
+[ 1016.563202]   Exception class = DABT (current EL), IL = 32 bits
+[ 1016.563480]   SET = 0, FnV = 0
+[ 1016.563612]   EA = 0, S1PTW = 0
+[ 1016.563776] Data abort info:
+[ 1016.563937]   ISV = 0, ISS = 0x00000004
+[ 1016.564412]   CM = 0, WnR = 0
+[ 1016.564823] user pgtable: 4k pages, 48-bit VAs, pgdp = 00000000c742141d
+[ 1016.565216] [0000000000000050] pgd=0000000000000000
+[ 1016.565840] Internal error: Oops: 96000004 [#1] SMP
+[ 1016.566239] Modules linked in: oops(OE+) aes_ce_blk(E) crypto_simd(E) cryptd(E) aes_ce_cipher(E) ghash_ce(E) gf128mul(E) aes_arm64(E) sha2_ce(E) evdev(E) sha256_arm64(E) sha1_ce(E) cfg80211(E) rfkill(E) 8021q(E) garp(E) mrp(E) stp(E) llc(E) gpio_keys(E) virtio_net(E) net_failover(E) failover(E) 9p(E) fscache(E) ip_tables(E) x_tables(E) autofs4(E)
+[ 1016.568152] CPU: 3 PID: 1659 Comm: insmod Kdump: loaded Tainted: G           OE     5.0.0-rlk+ #1
+[ 1016.568853] Hardware name: linux,dummy-virt (DT)
+[ 1016.569236] pstate: 80000005 (Nzcv daif -PAN -UAO)
+[ 1016.569995] pc : create_oops+0x20/0x4c [oops]
+[ 1016.570267] lr : my_oops_init+0xa0/0x1000 [oops]
+[ 1016.570469] sp : ffff000012873b20
+[ 1016.570640] x29: ffff000012873b20 x28: ffff0000113fb090
+[ 1016.571028] x27: ffff000008cf81d0 x26: ffff000008cf8180
+[ 1016.571305] x25: ffff000010b66988 x24: ffff0000113fb000
+[ 1016.571564] x23: ffff000008cf8018 x22: ffff800027249a80
+[ 1016.571849] x21: 0000000000000000 x20: ffff000008c02000
+[ 1016.572260] x19: ffff0000113cd000 x18: ffffffffffffffff
+[ 1016.572601] x17: 0000000000000000 x16: 0000000000000000
+[ 1016.572885] x15: ffff0000113cd708 x14: ffff8000234f791c
+[ 1016.573152] x13: 0000000000000040 x12: 0000000000000228
+[ 1016.573506] x11: 0000000000000000 x10: 0000000000000000
+[ 1016.573788] x9 : 0000000000000000 x8 : ffff8000291cf600
+[ 1016.574027] x7 : ffff80002a803b00 x6 : ffff000012873b89
+[ 1016.574264] x5 : 0000000000000cfd x4 : ffff80002fde1b00
+[ 1016.574503] x3 : 0000000000000000 x2 : ffff000008c020a0
+[ 1016.574746] x1 : ffff000012873b84 x0 : 0000000000000000
+[ 1016.575060] Process insmod (pid: 1659, stack limit = 0x0000000022ed716c)
+[ 1016.575510] Call trace:
+[ 1016.575789]  create_oops+0x20/0x4c [oops]
+[ 1016.576020]  my_oops_init+0xa0/0x1000 [oops]
+[ 1016.576741]  do_one_initcall+0x54/0x1f0
+[ 1016.577009]  do_init_module+0x64/0x1d8
+[ 1016.577182]  load_module+0x1db8/0x1f00
+[ 1016.577347]  __se_sys_finit_module+0xf0/0x100
+[ 1016.577533]  __arm64_sys_finit_module+0x24/0x30
+[ 1016.577739]  el0_svc_common+0x78/0x120
+[ 1016.577936]  el0_svc_handler+0x38/0x78
+[ 1016.578125]  el0_svc+0x8/0xc
+[ 1016.578447] Code: f9000be1 aa0203e0 d503201f f9400fe0 (f9402800)
+[ 1016.579516] SMP: stopping secondary CPUs
+[ 1016.581326] Starting crashdump kernel...
+[ 1016.581787] Bye!
 
-5.	在QEMU虚拟机中，启动crash工具进行分析。
+系统重启到capture内核，然后启动kdump服务来进行内核转存。
+[   32.574743] kdump-tools[256]: Starting kdump-tools: running makedumpfile -c -d 31 /proc/vmcore /var/crash/201906201406/dump-incomplete.
+Copying data                                      : [100.0 %] /           eta: 0s
+
+转存完成之后，再一次重启，启动到正常的内核。
+转存好的文件在：/var/crash/目录
+
+9.在QEMU虚拟机中，启动crash工具进行分析。
 进入/var/crash/目录。转存的目录是以日期来命名，这一点和Centos系统略有不同。使用crash命令来加载内核转存文件。
+需要在另外一个终端里拷贝vmlinux文件到runninglinuxkernel-5.0/kmodules.
 
 root@benshushu:/var/crash# ls
 201904221429  kexec_cmd
 root@benshushu:/var/crash#
-
 root@benshushu:/var/crash/201904221429# crash dump.201904221429 /mnt/vmlinux
 
       KERNEL: /mnt/vmlinux
